@@ -1,0 +1,67 @@
+cabal-version: 2.2
+
+-- This file has been generated from package.yaml by hpack version 0.36.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           lambda-reasoner
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/lambda-reasoner#readme>
+homepage:       https://github.com/wasabi315/lambda-reasoner#readme
+bug-reports:    https://github.com/wasabi315/lambda-reasoner/issues
+author:         Satoshi Takimoto
+maintainer:     example@example.com
+copyright:      2024 Satoshi Takimoto
+license:        BSD-3-Clause
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/wasabi315/lambda-reasoner
+
+library
+  exposed-modules:
+      Lib
+  other-modules:
+      Paths_lambda_reasoner
+  autogen-modules:
+      Paths_lambda_reasoner
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      base >=4.7 && <5
+  default-language: Haskell2010
+
+executable lambda-reasoner-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_lambda_reasoner
+  autogen-modules:
+      Paths_lambda_reasoner
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , lambda-reasoner
+  default-language: Haskell2010
+
+test-suite lambda-reasoner-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_lambda_reasoner
+  autogen-modules:
+      Paths_lambda_reasoner
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , lambda-reasoner
+  default-language: Haskell2010
