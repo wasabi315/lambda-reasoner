@@ -1,0 +1,3 @@
+[submodule "lib/ideas"]
+	path = lib/ideas
+	url = git@github.com:ideas-edu/ideas.git
