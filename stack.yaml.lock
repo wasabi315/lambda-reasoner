@@ -5,15 +5,15 @@
 
 packages:
 - completed:
-    commit: 13bc304e78aa78d0dec6e0e5e9e7a31aa6715390
+    commit: 181a18845d706ce3d3cd014b3229795f0ec50d68
     git: https://github.com/ideas-edu/ideas.git
     name: ideas
     pantry-tree:
-      sha256: 2a7162272158751550727317d46570e787c6c622e1239d6b03a4781dca6e7054
-      size: 9940
+      sha256: f2486b28006694001bcc7d903372fdfe0ee588709d2a23e063e3f53ddf8f8d7c
+      size: 10873
     version: 1.8.1
   original:
-    commit: 13bc304e78aa78d0dec6e0e5e9e7a31aa6715390
+    commit: 181a18845d706ce3d3cd014b3229795f0ec50d68
     git: https://github.com/ideas-edu/ideas.git
 snapshots:
 - completed:

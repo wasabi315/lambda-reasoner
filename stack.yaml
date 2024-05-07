@@ -39,12 +39,16 @@ packages:
 # - git: https://github.com/commercialhaskell/stack.git
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
+allow-newer: true
 extra-deps:
 - git: https://github.com/ideas-edu/ideas.git
-  commit: 13bc304e78aa78d0dec6e0e5e9e7a31aa6715390
+  commit: 181a18845d706ce3d3cd014b3229795f0ec50d68
+# - HDBC-sqlite3-2.3.3.1@sha256:5025fd94d02b9b3f0b8b8233796dd9a85a0b3dda6503c6e671e3eddbc51cb4d4,242
 
 # Override default flag values for local packages and extra-deps
-# flags: {}
+flags:
+  ideas:
+    logging: false
 
 # Extra package databases containing global packages
 # extra-package-dbs: []

@@ -35,6 +35,9 @@ ghc-options:
 
 library:
   source-dirs: src
+  dependencies:
+  - ideas
+  - containers
 
 executables:
   lambda-reasoner-exe:
@@ -46,6 +49,8 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - lambda-reasoner
+    - ideas
+    - containers
 
 tests:
   lambda-reasoner-test:
