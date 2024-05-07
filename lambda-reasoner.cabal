@@ -6,11 +6,11 @@ cabal-version: 2.2
 
 name:           lambda-reasoner
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/lambda-reasoner#readme>
+description:    Please see the README on GitHub at <https://github.com/wasabi315/lambda-reasoner#readme>
 homepage:       https://github.com/wasabi315/lambda-reasoner#readme
 bug-reports:    https://github.com/wasabi315/lambda-reasoner/issues
 author:         Satoshi Takimoto
-maintainer:     example@example.com
+maintainer:     takimoto.s.ab@m.titech.ac.jp
 copyright:      2024 Satoshi Takimoto
 license:        BSD-3-Clause
 license-file:   LICENSE
