@@ -21,6 +21,8 @@ description:         Please see the README on GitHub at <https://github.com/wasa
 
 dependencies:
 - base >= 4.7 && < 5
+- ideas
+- containers
 
 ghc-options:
 - -Wall
@@ -35,9 +37,6 @@ ghc-options:
 
 library:
   source-dirs: src
-  dependencies:
-  - ideas
-  - containers
 
 executables:
   lambda-reasoner-exe:
@@ -49,8 +48,6 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - lambda-reasoner
-    - ideas
-    - containers
 
 tests:
   lambda-reasoner-test:
