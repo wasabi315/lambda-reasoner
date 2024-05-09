@@ -1,5 +1,4 @@
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module LambdaReasoner.Expr
@@ -14,6 +13,7 @@ module LambdaReasoner.Expr
     etaRed,
     alphaEtaEq,
     alphaBetaEtaEq,
+    normalize,
     fresh,
   )
 where
@@ -184,7 +184,7 @@ etaRed :: Expr -> Expr
 etaRed (Var x) = Var x
 etaRed (App t u) = App (etaRed t) (etaRed u)
 etaRed (Abs x t) = case etaRed t of
-  u `App` Var x'
+  App u (Var x')
     | x == x' && x `Set.notMember` freeVars u -> u
   t' -> Abs x t'
 
@@ -195,20 +195,22 @@ alphaEtaEq :: Expr -> Expr -> Bool
 alphaEtaEq = alphaEq `on` etaRed
 
 --------------------------------------------------------------------------------
--- Normalization
+-- Normalization with gas limit
 
 data Val
   = VVar String
-  | VApp Val (Maybe Val)
-  | VAbs String (Int -> Maybe Val -> Maybe Val)
+  | VApp Val Val
+  | --                  vvvvvvvvv maybe non-terminating, hence Maybe
+    VAbs String (Int -> Maybe Val -> Maybe Val)
 
 eval :: Int -> [(String, Maybe Val)] -> Expr -> Maybe Val
 eval 0 _ _ = Nothing
 eval _ env (Var x) = fromMaybe (pure $ VVar x) $ lookup x env
-eval gas env (App t u) =
-  eval gas env t >>= \case
+eval gas env (App t u) = do
+  t' <- eval gas env t
+  case t' of
     VAbs _ f -> f (gas - 1) (eval gas env u)
-    t' -> pure $ VApp t' (eval gas env u)
+    _ -> VApp t' <$> eval gas env u
 eval _ env (Abs x t) = pure $ VAbs x \gas u -> eval gas ((x, u) : env) t
 
 fresh :: Set String -> String -> String
@@ -217,20 +219,20 @@ fresh xs x =
     & find (`Set.notMember` xs)
     & fromJust
 
-_GAS :: Int
-_GAS = 1024
+quote :: Int -> Set String -> Val -> Maybe Expr
+quote _ _ (VVar x) = pure $ Var x
+quote gas ns (VApp t u) = App <$> quote gas ns t <*> quote gas ns u
+quote gas ns (VAbs (fresh ns -> x) t) = do
+  t1 <- t gas (pure $ VVar x)
+  t2 <- quote gas (Set.insert x ns) t1
+  return $ Abs x t2
 
-quote :: Set String -> Val -> Maybe Expr
-quote _ (VVar x) = pure $ Var x
-quote ns (VApp t u) = App <$> quote ns t <*> (u >>= quote ns)
-quote ns (VAbs (fresh ns -> x) t) =
-  t _GAS (pure $ VVar x) >>= fmap (Abs x) . quote (Set.insert x ns)
+-- | Normalize a term, up to a given gas limit.
+normalize :: Int -> Expr -> Maybe Expr
+normalize gas t = eval gas [] t >>= quote gas (freeVars t)
 
-normalize :: Expr -> Maybe Expr
-normalize t = eval _GAS [] t >>= quote (freeVars t)
-
--- | Check if two terms are αβη-equivalent.
-alphaBetaEtaEq :: Expr -> Expr -> Bool
-alphaBetaEtaEq t u = case (normalize t, normalize u) of
+-- | Check if two terms are αβη-equivalent, up to a given gas limit.
+alphaBetaEtaEq :: Int -> Expr -> Expr -> Bool
+alphaBetaEtaEq gas t u = case (normalize gas t, normalize gas u) of
   (Just t', Just u') -> t' `alphaEtaEq` u'
   _ -> False

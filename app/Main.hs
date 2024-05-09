@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Data.Maybe
 import Ideas.Common.Library
 import Ideas.Main.Default
 import LambdaReasoner.BuggyRules
@@ -11,6 +12,9 @@ import Text.Read
 
 --------------------------------------------------------------------------------
 
+_GAS :: Int
+_GAS = 1024
+
 fullBetaEx, leftmostEx :: Exercise Expr
 fullBetaEx =
   emptyExercise
@@ -19,11 +23,12 @@ fullBetaEx =
       strategy = fullBetaStrategy,
       extraRules = map liftToContext buggyRules,
       navigation = termNavigator,
-      equivalence = withoutContext alphaBetaEtaEq,
+      equivalence = withoutContext (alphaBetaEtaEq _GAS),
       similarity = withoutContext (==),
+      suitable = predicate (isJust . normalize _GAS),
+      ready = predicate isBetaNormal,
       prettyPrinter = show,
       parser = readEither,
-      ready = predicate isBetaNormal,
       examples = examplesFor Easy [_S `App` _K `App` _K, _S `App` _K `App` _S, Abs "x" (Abs "y" (Var "x")) `App` Var "y", Abs "x" (Abs "x" $ Var "x") `App` Var "y"]
     }
 leftmostEx =
