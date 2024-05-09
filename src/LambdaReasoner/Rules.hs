@@ -1,5 +1,3 @@
-{-# LANGUAGE Arrows #-}
-
 module LambdaReasoner.Rules
   ( ruleBeta,
     ruleFVars,
@@ -8,12 +6,10 @@ module LambdaReasoner.Rules
   )
 where
 
-import Control.Arrow
+import Control.Monad
 import Data.Maybe
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Ideas.Common.Library
-import Ideas.Utils.Prelude
 import LambdaReasoner.Expr
 
 --------------------------------------------------------------------------------
@@ -21,49 +17,30 @@ import LambdaReasoner.Expr
 ruleBeta :: Rule Expr
 ruleBeta = makeRule "eval.beta" f
   where
-    f (App (Abs x t) u)
-      | not (willCaptureOccur x u t) = Just $ nonCaptureAvoidingSubst x u t
+    f (App (Abs x t) u) = (x --> u) t
     f _ = Nothing
 
 fvarsRef :: Ref Term
 fvarsRef = makeRef "fvars"
 
-writeFVars :: Trans (Set String) ()
-writeFVars =
-  (toTerm . Set.mapMonotonic ShowString) ^>> writeRef fvarsRef >>^ const ()
-
-readFVars :: Trans x (Set String)
-readFVars =
-  readRefMaybe fvarsRef
-    >>^ maybe Set.empty (Set.mapMonotonic fromShowString . fromJust . fromTerm)
-
 -- Administrative rule
 ruleFVars :: Rule (Context Expr)
-ruleFVars = setMinor True . ruleTrans "eval.fvars" $ transLiftContext g
+ruleFVars = minorRule "eval.fvars" f
   where
-    f (App (Abs _ _) u) = Just u
-    f _ = Nothing
-
-    g = proc t -> do
-      u <- transMaybe f -< t
-      writeFVars -< freeVars u
-      returnA -< t
+    f ctx = do
+      App (Abs _ _) u <- currentInContext ctx
+      pure $ insertRef fvarsRef (toTerm $ freeVars u) ctx
 
 ruleAlpha :: Rule (Context Expr)
 ruleAlpha =
-  addRecognizerBool (withoutContext alphaEq)
-    . ruleTrans "eval.alpha"
-    $ transLiftContext g
+  addRecognizerBool (withoutContext alphaEq) $ makeRule "eval.alpha" f
   where
-    f (fvs, t@(Abs x u))
-      | x `Set.member` fvs =
-          let y = fresh (fvs <> freeVars t) x
-           in Just $ Abs y (rename x y u)
-    f _ = Nothing
-
-    g = proc t -> do
-      fvs <- readFVars -< ()
-      transMaybe f -< (fvs, t)
+    f ctx = do
+      t@(Abs x u) <- currentInContext ctx
+      let fvs = maybe Set.empty (fromJust . fromTerm) $ fvarsRef ? ctx
+          y = fresh (fvs <> freeVars t) x
+      guard $ x /= y
+      pure $ replaceInContext (Abs y $ rename x y u) ctx
 
 ruleEta :: Rule Expr
 ruleEta = makeRule "eval.eta" f
