@@ -3,6 +3,8 @@
 
 module LambdaReasoner.Expr
   ( Expr (..),
+    BetaRedex (..),
+    betaRedexView,
     freeVars,
     isBetaNormal,
     rename,
@@ -100,6 +102,40 @@ instance IsTerm Expr where
         tCon2 appSymbol App termDecoder termDecoder,
         tCon2 absSymbol Abs tVar termDecoder
       ]
+
+instance Reference Expr
+
+--------------------------------------------------------------------------------
+-- Beta redex
+
+data BetaRedex = BetaRedex String Expr Expr
+
+instance Show BetaRedex where
+  showsPrec p t = showsPrec p (build betaRedexView t)
+
+instance Read BetaRedex where
+  readPrec = do
+    t <- readPrec
+    case match betaRedexView t of
+      Just b -> return b
+      Nothing -> fail "not a beta redex"
+
+betaRedexSymbol :: Symbol
+betaRedexSymbol = newSymbol "betaRedex"
+
+instance IsTerm BetaRedex where
+  toTerm (BetaRedex x t u) = TCon betaRedexSymbol [TVar x, toTerm t, toTerm u]
+
+  termDecoder = tCon3 betaRedexSymbol BetaRedex tVar termDecoder termDecoder
+
+instance Reference BetaRedex
+
+betaRedexView :: View Expr BetaRedex
+betaRedexView = makeView m b
+  where
+    m (App (Abs x t) u) = Just $ BetaRedex x t u
+    m _ = Nothing
+    b (BetaRedex x t u) = App (Abs x t) u
 
 --------------------------------------------------------------------------------
 -- Operations and predicates on lambda terms

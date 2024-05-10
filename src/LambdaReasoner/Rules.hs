@@ -1,13 +1,14 @@
 module LambdaReasoner.Rules
   ( ruleBeta,
-    ruleFVars,
+    betaRedexRef,
+    ruleRecordBetaRedex,
+    ruleUnrecordBetaRedex,
     ruleAlpha,
     ruleEta,
   )
 where
 
 import Control.Monad
-import Data.Maybe
 import qualified Data.Set as Set
 import Ideas.Common.Library
 import LambdaReasoner.Expr
@@ -20,16 +21,20 @@ ruleBeta = makeRule "eval.beta" f
     f (App (Abs x t) u) = (x --> u) t
     f _ = Nothing
 
-fvarsRef :: Ref Term
-fvarsRef = makeRef "fvars"
+betaRedexRef :: Ref BetaRedex
+betaRedexRef = makeRef "beta-redex"
 
--- Administrative rule
-ruleFVars :: Rule (Context Expr)
-ruleFVars = minorRule "eval.fvars" f
+ruleRecordBetaRedex :: Rule (Context Expr)
+ruleRecordBetaRedex = minorRule "eval.record-beta-redex" f
   where
     f ctx = do
-      App (Abs _ _) u <- currentInContext ctx
-      pure $ insertRef fvarsRef (toTerm $ freeVars u) ctx
+      App (Abs x t) u <- currentInContext ctx
+      pure $ insertRef betaRedexRef (BetaRedex x t u) ctx
+
+ruleUnrecordBetaRedex :: Rule (Context Expr)
+ruleUnrecordBetaRedex = minorRule "eval.unrecord-beta-redex" f
+  where
+    f ctx = Just $ deleteRef betaRedexRef ctx
 
 ruleAlpha :: Rule (Context Expr)
 ruleAlpha =
@@ -37,7 +42,7 @@ ruleAlpha =
   where
     f ctx = do
       t@(Abs x u) <- currentInContext ctx
-      let fvs = maybe Set.empty (fromJust . fromTerm) $ fvarsRef ? ctx
+      let fvs = maybe Set.empty (\(BetaRedex _ _ v) -> freeVars v) $ betaRedexRef ? ctx
           y = fresh (fvs <> freeVars t) x
       guard $ x /= y
       pure $ replaceInContext (Abs y $ rename x y u) ctx
