@@ -18,18 +18,18 @@ import LambdaReasoner.Rules
 captureAvoidingBeta :: LabeledStrategy (Context Expr)
 captureAvoidingBeta =
   label "capture-avoiding-beta" $
-    -- If the current term is a beta redex, say (\x. t) u, record it
-    ruleRecordBetaRedex
+    -- If the current term is a beta redex, say (\x. t) u, save it
+    ruleSaveBetaRedex
       -- Go down to t
       .*. (ruleDown .*. ruleDownLast)
-      -- Apply α-conversion to appropriate subterms
+      -- Apply α-conversion to appropriate subterms referring to the saved beta redex
       .*. repeatS (Ideas.traverse [topdown, traversalFilter notShadowed] ruleAlpha)
       -- Why this doesn't work?
       -- .*. Ideas.traverse [full, topdown, traversalFilter notShadowed] (try ruleAlpha)
       -- Go back to the beta redex
       .*. (ruleUp .*. ruleUp)
       .*. liftToContext ruleBeta
-      .*. ruleUnrecordBetaRedex
+      .*. ruleForgetBetaRedex
   where
     notShadowed ctx@(currentInContext -> Just (Abs y _)) =
       let BetaRedex x _ _ = fromJust $ betaRedexRef ? ctx

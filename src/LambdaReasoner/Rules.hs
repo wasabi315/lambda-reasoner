@@ -1,8 +1,8 @@
 module LambdaReasoner.Rules
   ( ruleBeta,
     betaRedexRef,
-    ruleRecordBetaRedex,
-    ruleUnrecordBetaRedex,
+    ruleSaveBetaRedex,
+    ruleForgetBetaRedex,
     ruleAlpha,
     ruleEta,
   )
@@ -24,15 +24,15 @@ ruleBeta = makeRule "eval.beta" f
 betaRedexRef :: Ref BetaRedex
 betaRedexRef = makeRef "beta-redex"
 
-ruleRecordBetaRedex :: Rule (Context Expr)
-ruleRecordBetaRedex = minorRule "eval.record-beta-redex" f
+ruleSaveBetaRedex :: Rule (Context Expr)
+ruleSaveBetaRedex = minorRule "eval.save-beta-redex" f
   where
     f ctx = do
       App (Abs x t) u <- currentInContext ctx
       pure $ insertRef betaRedexRef (BetaRedex x t u) ctx
 
-ruleUnrecordBetaRedex :: Rule (Context Expr)
-ruleUnrecordBetaRedex = minorRule "eval.unrecord-beta-redex" f
+ruleForgetBetaRedex :: Rule (Context Expr)
+ruleForgetBetaRedex = minorRule "eval.forget-beta-redex" f
   where
     f ctx = Just $ deleteRef betaRedexRef ctx
 
