@@ -7,6 +7,7 @@ module LambdaReasoner.BuggyRules
   )
 where
 
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Ideas.Common.Library
 import LambdaReasoner.Expr
@@ -36,13 +37,14 @@ buggyBeta2 :: Rule Expr
 buggyBeta2 = siblingOf ruleBeta $ buggyRule "eval.buggyBeta2" f
   where
     f (App (Abs x t) u)
-      | willCaptureOccur x u t = Just $ nonCaptureAvoidingSubst x u t
+      | (t', False) <- nonCaptureAvoidingSubst (Map.singleton x u) t = Just t'
     f _ = Nothing
 
 buggyAlpha :: Rule Expr
 buggyAlpha = siblingOf ruleAlpha $ buggyRule "eval.buggyAlpha" f
   where
-    f t@(Abs x u) = [Abs y (rename x y u) | y <- Set.toList (freeVars t)]
+    f t@(Abs x u) =
+      [Abs y (rename (Map.singleton x y) u) | y <- Set.toList (freeVars t)]
     f _ = []
 
 buggyEta :: Rule Expr

@@ -24,7 +24,7 @@ fullBetaEx =
       extraRules = map liftToContext buggyRules,
       navigation = termNavigator,
       equivalence = withoutContext (alphaBetaEtaEq _GAS),
-      similarity = withoutContext (==),
+      similarity = withoutContext (\x y -> x `alphaEq` y && needRenameCtxs x == needRenameCtxs y),
       suitable = predicate (isJust . normalize _GAS),
       ready = predicate isBetaNormal,
       prettyPrinter = show,

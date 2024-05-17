@@ -27,8 +27,10 @@ library
   exposed-modules:
       LambdaReasoner.BuggyRules
       LambdaReasoner.Expr
+      LambdaReasoner.Generator
       LambdaReasoner.Rules
       LambdaReasoner.Strategies
+      LambdaReasoner.Views
   other-modules:
       Paths_lambda_reasoner
   autogen-modules:
@@ -37,7 +39,8 @@ library
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      base >=4.7 && <5
+      QuickCheck
+    , base >=4.7 && <5
     , containers
     , ideas
   default-language: Haskell2010
@@ -52,7 +55,8 @@ executable lambda-reasoner-exe
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      QuickCheck
+    , base >=4.7 && <5
     , containers
     , ideas
     , lambda-reasoner
@@ -69,7 +73,8 @@ test-suite lambda-reasoner-test
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      QuickCheck
+    , base >=4.7 && <5
     , containers
     , ideas
     , lambda-reasoner

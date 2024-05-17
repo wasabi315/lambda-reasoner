@@ -34,7 +34,7 @@ captureAvoidingBeta =
     notShadowed ctx@(currentInContext -> Just (Abs y _)) =
       let BetaRedex x _ _ = fromJust $ betaRedexRef ? ctx
        in x /= y
-    notShadowed _ = False
+    notShadowed _ = True
 
 fullBetaStrategy :: LabeledStrategy (Context Expr)
 fullBetaStrategy =

@@ -7,23 +7,28 @@ module LambdaReasoner.Expr
     betaRedexView,
     freeVars,
     isBetaNormal,
+    Rename,
     rename,
+    Subst,
+    subst,
     nonCaptureAvoidingSubst,
-    willCaptureOccur,
-    (-->),
     alphaEq,
     etaRed,
     alphaEtaEq,
     alphaBetaEtaEq,
     normalize,
     fresh,
+    needRenameCtxs,
   )
 where
 
 import Control.Applicative
 import Data.Char
+import Data.Foldable
 import Data.Function
-import Data.List (elemIndex, find)
+import Data.List (elemIndex)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -153,45 +158,80 @@ isBetaNormal (App t u) = isBetaNormal t && isBetaNormal u
 isBetaNormal (Abs _ t) = isBetaNormal t
 isBetaNormal (Var _) = True
 
--- | @'rename' from to t@ renames all occurrences of @from@ to @to@ in @t@.
-rename :: String -> String -> Expr -> Expr
-rename from to (Var x)
-  | x == from = Var to
+type Rename = Map String String
+
+-- | @'rename' r t@ renames all variables in @t@ according to @r@.
+rename :: Rename -> Expr -> Expr
+rename r (Var x)
+  | Just x' <- Map.lookup x r = Var x'
   | otherwise = Var x
-rename from to (App t u) = App (rename from to t) (rename from to u)
-rename from to (Abs x t)
-  | x /= from = Abs x (rename from to t)
-  | otherwise = Abs x t
+rename r (App t u) = App (rename r t) (rename r u)
+rename r (Abs x t) = Abs x (rename (Map.delete x r) t)
 
--- | @'nonCaptureAvoidingSubst' x u t@ substitutes @x@ with @u@ in @t@,
--- __/without avoiding variable capture/__. Please check that
--- @'willCaptureOccur' x u t@ is 'False' before using this function.
-nonCaptureAvoidingSubst :: String -> Expr -> Expr -> Expr
-nonCaptureAvoidingSubst x u (Var y)
-  | x == y = u
-  | otherwise = Var y
-nonCaptureAvoidingSubst x u (App t v) =
-  App (nonCaptureAvoidingSubst x u t) (nonCaptureAvoidingSubst x u v)
-nonCaptureAvoidingSubst x u (Abs y t)
-  | x == y = Abs y t
-  | otherwise = Abs y (nonCaptureAvoidingSubst x u t)
+data Ctx
+  = CtxAppL
+  | CtxAppR
+  | CtxAbs
+  deriving (Eq, Ord, Show)
 
--- | Check if substituting @x@ with @u@ in @t@ would capture any free variables in @u@.
-willCaptureOccur :: String -> Expr -> Expr -> Bool
-willCaptureOccur x t = aux
+type Subst = Map String Expr
+
+-- Simultanous substitution
+subst' :: Subst -> Expr -> (Expr, Set [Ctx])
+subst' = go []
   where
-    fvs = freeVars t
+    go _ sub (Var x)
+      | Just u <- Map.lookup x sub = (u, mempty)
+      | otherwise = (Var x, mempty)
+    go ctx sub (App u v) =
+      let (u', varCaps1) = go (CtxAppL : ctx) sub u
+          (v', varCaps2) = go (CtxAppR : ctx) sub v
+       in (App u' v', varCaps1 <> varCaps2)
+    go ctx sub (Abs x u) =
+      let sub' = Map.restrictKeys (Map.delete x sub) (freeVars u)
+          fvs = foldMap freeVars sub'
+          (u', varCaps1) = go (CtxAbs : ctx) sub' u
+          varCaps2 = if x `Set.member` fvs then Set.singleton ctx else mempty
+       in (Abs x u', varCaps1 <> varCaps2)
 
-    aux (Var _) = False
-    aux (App u v) = aux u || aux v
-    aux (Abs y u) = x /= y && (y `Set.member` fvs || aux u)
+singleSubst' :: String -> Expr -> Expr -> (Expr, Set [Ctx])
+singleSubst' x t = subst' (Map.singleton x t)
+
+-- | @'subst' sub t@ substitutes variables in @t@ according to @sub@.
+-- Returns 'Nothing' if variable capture occurs.
+subst :: Subst -> Expr -> Maybe Expr
+subst sub t = case subst' sub t of
+  (t', Set.null -> True) -> Just t'
+  _ -> Nothing
 
 -- | @(x '-->' u) t@ substitutes @x@ with @u@ in @t@.
--- 'fail's if the substitution would capture any free variables in @u@.
-(-->) :: (MonadFail m) => String -> Expr -> Expr -> m Expr
-(x --> u) t
-  | willCaptureOccur x u t = fail "variable capture"
-  | otherwise = pure $ nonCaptureAvoidingSubst x u t
+-- Returns 'Nothing' if the substitution captures any free variables in @u@.
+(-->) :: String -> Expr -> Expr -> Maybe Expr
+(x --> u) t = case subst' (Map.singleton x u) t of
+  (t', Set.null -> True) -> Just t'
+  _ -> Nothing
+
+-- | @'nonCaptureAvoidingSubst' sub t@ substitutes variables in @t@ according to @sub@
+-- __/without avoiding variable capture/__.
+-- The second component of the result indicates whether variable capture __/does not occur/__.
+nonCaptureAvoidingSubst :: Subst -> Expr -> (Expr, Bool)
+nonCaptureAvoidingSubst sub t = Set.null <$> subst' sub t
+
+needRenameCtxs :: Expr -> Set [Ctx]
+needRenameCtxs = go []
+  where
+    go ctx (App t u)
+      | Abs x t' <- t =
+          let varCaps' =
+                singleSubst' x u t'
+                  & snd
+                  & Set.map (\varCap -> varCap ++ [CtxAbs, CtxAppL] ++ ctx)
+           in varCaps' <> varCaps
+      | otherwise = varCaps
+      where
+        varCaps = go (CtxAppL : ctx) t <> go (CtxAppR : ctx) u
+    go ctx (Abs _ t) = go (CtxAbs : ctx) t
+    go _ (Var _) = mempty
 
 --------------------------------------------------------------------------------
 
@@ -236,8 +276,7 @@ alphaEtaEq = alphaEq `on` etaRed
 data Val
   = VVar String
   | VApp Val Val
-  | --                  vvvvvvvvv maybe non-terminating, hence Maybe
-    VAbs String (Int -> Maybe Val -> Maybe Val)
+  | VAbs String (Int -> Maybe Val -> Maybe Val)
 
 eval :: Int -> [(String, Maybe Val)] -> Expr -> Maybe Val
 eval 0 _ _ = Nothing
