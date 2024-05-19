@@ -3,27 +3,21 @@
 
 module LambdaReasoner.Expr
   ( Expr (..),
-    Sub (..),
-    BetaRedex (..),
-    betaRedexView,
+    Subst (..),
     freeVars,
     isBetaNormal,
-    Rename,
     rename,
-    Subst,
-    subst',
+    ExprPath (..),
     subst,
     nonCaptureAvoidingSubst,
     (-->),
-    isSubstSafe,
-    Ctx (..),
+    needRenamePaths,
     alphaEq,
     etaRed,
     alphaEtaEq,
     alphaBetaEtaEq,
     normalize,
     fresh,
-    needRenameCtxs,
   )
 where
 
@@ -32,8 +26,6 @@ import Data.Char
 import Data.Foldable
 import Data.Function
 import Data.List (elemIndex)
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -116,59 +108,28 @@ instance IsTerm Expr where
 instance Reference Expr
 
 --------------------------------------------------------------------------------
+-- Single substitution
 
-data Sub = Sub String Expr
+data Subst = Subst String Expr
 
-instance Show Sub where
-  showsPrec p (Sub x t) =
+instance Show Subst where
+  showsPrec p (Subst x t) =
     showParen (p > 10) $
       showString x . showString " -> " . showsPrec 11 t
 
-instance Read Sub where
+instance Read Subst where
   readPrec = lift do
     ReadP.skipSpaces
-    Sub <$> varP <*> (sym "->" *> exprP)
+    Subst <$> varP <*> (sym "->" *> exprP)
 
 subSymbol :: Symbol
 subSymbol = newSymbol "sub"
 
-instance IsTerm Sub where
-  toTerm (Sub x t) = TCon subSymbol [toTerm x, toTerm t]
-  termDecoder = tCon2 subSymbol Sub termDecoder termDecoder
+instance IsTerm Subst where
+  toTerm (Subst x t) = TCon subSymbol [toTerm x, toTerm t]
+  termDecoder = tCon2 subSymbol Subst termDecoder termDecoder
 
-instance Reference Sub
-
---------------------------------------------------------------------------------
--- Beta redex
-
-data BetaRedex = BetaRedex String Expr Expr
-
-instance Show BetaRedex where
-  showsPrec p t = showsPrec p (build betaRedexView t)
-
-instance Read BetaRedex where
-  readPrec = do
-    t <- readPrec
-    case match betaRedexView t of
-      Just b -> return b
-      Nothing -> fail "not a beta redex"
-
-betaRedexSymbol :: Symbol
-betaRedexSymbol = newSymbol "betaRedex"
-
-instance IsTerm BetaRedex where
-  toTerm (BetaRedex x t u) = TCon betaRedexSymbol [TVar x, toTerm t, toTerm u]
-
-  termDecoder = tCon3 betaRedexSymbol BetaRedex tVar termDecoder termDecoder
-
-instance Reference BetaRedex
-
-betaRedexView :: View Expr BetaRedex
-betaRedexView = makeView m b
-  where
-    m (App (Abs x t) u) = Just $ BetaRedex x t u
-    m _ = Nothing
-    b (BetaRedex x t u) = App (Abs x t) u
+instance Reference Subst
 
 --------------------------------------------------------------------------------
 -- Operations and predicates on lambda terms
@@ -186,80 +147,78 @@ isBetaNormal (App t u) = isBetaNormal t && isBetaNormal u
 isBetaNormal (Abs _ t) = isBetaNormal t
 isBetaNormal (Var _) = True
 
-type Rename = Map String String
+-- | @'rename' from to t@ renames all occurrences of @from@ to @to@ in @t@.
+rename :: String -> String -> Expr -> Expr
+rename x x' (Var y)
+  | x == y = Var x'
+  | otherwise = Var y
+rename x x' (App t u) = App (rename x x' t) (rename x x' u)
+rename x x' (Abs y t)
+  | x == y = Abs y t
+  | otherwise = Abs y (rename x x' t)
 
--- | @'rename' r t@ renames all variables in @t@ according to @r@.
-rename :: Rename -> Expr -> Expr
-rename r (Var x)
-  | Just x' <- Map.lookup x r = Var x'
-  | otherwise = Var x
-rename r (App t u) = App (rename r t) (rename r u)
-rename r (Abs x t) = Abs x (rename (Map.delete x r) t)
-
-data Ctx
-  = CtxAppL
-  | CtxAppR
-  | CtxAbs
+data ExprPath
+  = PHere
+  | PAppL ExprPath
+  | PAppR ExprPath
+  | PAbs ExprPath
   deriving (Eq, Ord, Show)
 
-type Subst = Map String Expr
+instance Semigroup ExprPath where
+  PHere <> p = p
+  PAppL p <> q = PAppL (p <> q)
+  PAppR p <> q = PAppR (p <> q)
+  PAbs p <> q = PAbs (p <> q)
 
--- Simultanous substitution
-subst' :: Subst -> Expr -> (Expr, Set [Ctx])
-subst' = go []
+instance Monoid ExprPath where
+  mempty = PHere
+
+subst :: String -> Expr -> Expr -> (Expr, Set ExprPath)
+subst = go id
   where
-    go _ sub (Var x)
-      | Just u <- Map.lookup x sub = (u, mempty)
-      | otherwise = (Var x, mempty)
-    go ctx sub (App u v) =
-      let (u', varCaps1) = go (CtxAppL : ctx) sub u
-          (v', varCaps2) = go (CtxAppR : ctx) sub v
+    go _ x t (Var y)
+      | x == y = (t, mempty)
+      | otherwise = (Var y, mempty)
+    go path x t (App u v) =
+      let (u', varCaps1) = go (path . PAppL) x t u
+          (v', varCaps2) = go (path . PAppR) x t v
        in (App u' v', varCaps1 <> varCaps2)
-    go ctx sub (Abs x u) =
-      let sub' = Map.restrictKeys (Map.delete x sub) (freeVars u)
-          fvs = foldMap freeVars sub'
-          (u', varCaps1) = go (CtxAbs : ctx) sub' u
-          varCaps2 = if x `Set.member` fvs then Set.singleton ctx else mempty
-       in (Abs x u', varCaps1 <> varCaps2)
-
--- | @'subst' sub t@ substitutes variables in @t@ according to @sub@.
--- Returns 'Nothing' if variable capture occurs.
-subst :: Subst -> Expr -> Maybe Expr
-subst sub t = case subst' sub t of
-  (t', Set.null -> True) -> Just t'
-  _ -> Nothing
+    go path x t (Abs y u)
+      | x == y = (Abs y u, mempty)
+      | y `Set.notMember` freeVars t =
+          let (u', varCaps) = go (path . PAbs) x t u
+           in (Abs y u', varCaps)
+      | otherwise =
+          let (u', varCaps) = go (path . PAbs) x t u
+           in (Abs y u', Set.insert (path PHere) varCaps)
 
 -- | @(x '-->' u) t@ substitutes @x@ with @u@ in @t@.
 -- Returns 'Nothing' if the substitution captures any free variables in @u@.
 (-->) :: String -> Expr -> Expr -> Maybe Expr
-(x --> u) t = case subst' (Map.singleton x u) t of
+(x --> u) t = case subst x u t of
   (t', Set.null -> True) -> Just t'
   _ -> Nothing
 
 -- | @'nonCaptureAvoidingSubst' sub t@ substitutes variables in @t@ according to @sub@
 -- __/without avoiding variable capture/__.
 -- The second component of the result indicates whether variable capture __/does not occur/__.
-nonCaptureAvoidingSubst :: Subst -> Expr -> (Expr, Bool)
-nonCaptureAvoidingSubst sub t = Set.null <$> subst' sub t
+nonCaptureAvoidingSubst :: String -> Expr -> Expr -> (Expr, Bool)
+nonCaptureAvoidingSubst x u t = Set.null <$> subst x u t
 
--- | @'isSubstSafe' x u t@ checks if the substitution @(x --> u)@ is safe in @t@.
-isSubstSafe :: String -> Expr -> Expr -> Bool
-isSubstSafe x u t = isJust $ (x --> u) t
-
-needRenameCtxs :: Expr -> Set [Ctx]
-needRenameCtxs = go []
+needRenamePaths :: Expr -> Set ExprPath
+needRenamePaths = go id
   where
-    go ctx (App t u)
+    go path (App t u)
       | Abs x t' <- t =
           let varCaps' =
-                subst' (Map.singleton x u) t'
+                subst x u t'
                   & snd
-                  & Set.map (\varCap -> varCap ++ [CtxAbs, CtxAppL] ++ ctx)
+                  & Set.map (path . PAppL . PAbs)
            in varCaps' <> varCaps
       | otherwise = varCaps
       where
-        varCaps = go (CtxAppL : ctx) t <> go (CtxAppR : ctx) u
-    go ctx (Abs _ t) = go (CtxAbs : ctx) t
+        varCaps = go (path . PAppL) t <> go (path . PAppR) u
+    go path (Abs _ t) = go (path . PAbs) t
     go _ (Var _) = mempty
 
 --------------------------------------------------------------------------------

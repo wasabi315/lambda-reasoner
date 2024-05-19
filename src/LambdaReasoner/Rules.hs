@@ -3,51 +3,59 @@
 module LambdaReasoner.Rules
   ( ruleBeta,
     subRef,
-    ruleSaveSub,
-    ruleForgetSub,
+    ruleSaveSubst,
+    ruleForgetSubst,
     ruleAlpha,
     ruleEta,
   )
 where
 
 import Control.Monad
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Ideas.Common.Library
 import LambdaReasoner.Expr
 
 --------------------------------------------------------------------------------
 
+-- | β-reduction: (λx.t) u ↝ t[x ↦ u].
+-- Fails if variable capture occurs.
 ruleBeta :: Rule Expr
 ruleBeta = makeRule "eval.beta" f
   where
     f (App (Abs x t) u) = (x --> u) t
     f _ = Nothing
 
-subRef :: Ref Sub
-subRef = makeRef "sub"
+-- | Reference to the current substitution.
+-- This is used to calculate a set of variables that should be avoided in α-conversion.
+subRef :: Ref Subst
+subRef = makeRef "subst"
 
-ruleSaveSub :: Rule (Context Expr)
-ruleSaveSub = minorRule "eval.save-sub" f
+-- | An administrative rule to save the current substitution.
+ruleSaveSubst :: Rule (Context Expr)
+ruleSaveSubst = minorRule "eval.save-subst" f
   where
     f ctx = do
       App (Abs x _) u <- currentInContext ctx
-      pure $ insertRef subRef (Sub x u) ctx
+      pure $ insertRef subRef (Subst x u) ctx
 
-ruleForgetSub :: Rule (Context Expr)
-ruleForgetSub = minorRule "eval.forget-sub" (Just . deleteRef subRef)
+-- | An administrative rule to forget the current substitution.
+ruleForgetSubst :: Rule (Context Expr)
+ruleForgetSubst = minorRule "eval.forget-subst" (Just . deleteRef subRef)
 
+-- | α-conversion: λx.t ↝ λy.t[x ↦ y], where y is fresh.
+-- If subRef is defined, say x ↦ u, then the free variables of u are also avoided.
 ruleAlpha :: Rule (Context Expr)
 ruleAlpha = makeRule "eval.alpha" f
   where
     f ctx = do
       t@(Abs x u) <- currentInContext ctx
-      let fvs1 = foldMap (\(Sub _ v) -> freeVars v) $ subRef ? ctx
+      let fvs1 = foldMap (\(Subst _ v) -> freeVars v) $ subRef ? ctx
           fvs2 = freeVars t
-          x' = fresh (fvs1 <> fvs2) x
-      guard $ x /= x' -- skip if no renaming is needed
-      pure $ replaceInContext (Abs x' $ rename (Map.singleton x x') u) ctx
+          y = fresh (fvs1 <> fvs2) x
+      guard $ x /= y -- skip if no renaming is needed
+      pure $ replaceInContext (Abs y $ rename x y u) ctx
 
+-- | η-reduction: λx. t x ↝ t, if x ∉ FV(t).
 ruleEta :: Rule Expr
 ruleEta = makeRule "eval.eta" f
   where

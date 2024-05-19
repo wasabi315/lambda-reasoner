@@ -15,7 +15,7 @@ import Text.Read
 _GAS :: Int
 _GAS = 1024
 
-fullBetaEx, leftmostEx :: Exercise Expr
+fullBetaEx, normalEx :: Exercise Expr
 fullBetaEx =
   emptyExercise
     { exerciseId = describe "Evaluate a lambda term" $ newId "eval.fullBeta",
@@ -24,17 +24,17 @@ fullBetaEx =
       extraRules = map liftToContext buggyRules,
       navigation = termNavigator,
       equivalence = withoutContext (alphaBetaEtaEq _GAS),
-      similarity = withoutContext (\x y -> x `alphaEq` y && needRenameCtxs x == needRenameCtxs y),
+      similarity = withoutContext (\x y -> x `alphaEq` y && needRenamePaths x == needRenamePaths y),
       suitable = predicate (isJust . normalize _GAS),
       ready = predicate isBetaNormal,
       prettyPrinter = show,
       parser = readEither,
       examples = examplesFor Easy [_S `App` _K `App` _K, _S `App` _K `App` _S, Abs "x" (Abs "y" (Var "x")) `App` Var "y", Abs "x" (Abs "x" $ Var "x") `App` Var "y"]
     }
-leftmostEx =
+normalEx =
   fullBetaEx
-    { exerciseId = describe "Evaluate a lambda term (leftmost)" $ newId "eval.leftmostBeta",
-      strategy = leftmostBetaStrategy
+    { exerciseId = describe "Evaluate a lambda term in normal evaluation order" $ newId "eval.normalBeta",
+      strategy = normalBetaStrategy
     }
 
 _I :: Expr
@@ -56,7 +56,7 @@ dr =
   describe
     "Domain reasoner for tutorial"
     (newDomainReasoner "eval")
-      { exercises = [Some fullBetaEx, Some leftmostEx],
+      { exercises = [Some fullBetaEx, Some normalEx],
         services = myServices
       }
 
