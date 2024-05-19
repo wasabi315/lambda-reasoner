@@ -18,8 +18,11 @@ import LambdaReasoner.Rules
 -- | Apply α-conversion before β-reduction for capture avoidance.
 captureAvoidingBeta :: LabeledStrategy (Context Expr)
 captureAvoidingBeta =
-  label "capture-avoiding-beta" $
-    repeatS
+  describe
+    "Apply α-conversion before β-reduction for capture avoidance."
+    $ label
+      "capture-avoiding-beta"
+    $ repeatS
       ( -- If the current term is a β-redex, say (λx.t) u, save the substitution x ↦ u
         ruleSaveSubst
           -- Go down to the term t
@@ -43,6 +46,7 @@ fullBetaStrategy =
   somewhere (captureAvoidingBeta .|. liftToContext ruleEta)
     & repeatS
     & label "eval.full-beta"
+    & describe "Evaluate a lambda term in full β-reduction order"
 
 -- | Normal evaluation order: the leftmost outermost redex is reduced first.
 -- The η-reduction rule can also be applied.
@@ -51,3 +55,4 @@ normalBetaStrategy =
   leftmosttd captureAvoidingBeta .|. somewhere (liftToContext ruleEta)
     & repeatS
     & label "eval.normal-beta"
+    & describe "Evaluate a lambda term in normal evaluation order"

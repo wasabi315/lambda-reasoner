@@ -20,7 +20,11 @@ import LambdaReasoner.Expr
 -- | β-reduction: (λx.t) u ↝ t[x ↦ u].
 -- Fails if variable capture occurs.
 ruleBeta :: Rule Expr
-ruleBeta = makeRule "eval.beta" f
+ruleBeta =
+  describe
+    "β-reduction: (λx.t) u ↝ t[x ↦ u].\
+    \Appropriate α-conversions should be applied before this rule."
+    $ makeRule "eval.beta" f
   where
     f (App (Abs x t) u) = (x --> u) t
     f _ = Nothing
@@ -45,7 +49,9 @@ ruleForgetSubst = minorRule "eval.forget-subst" (Just . deleteRef subRef)
 -- | α-conversion: λx.t ↝ λy.t[x ↦ y], where y is fresh.
 -- If subRef is defined, say x ↦ u, then the free variables of u are also avoided.
 ruleAlpha :: Rule (Context Expr)
-ruleAlpha = makeRule "eval.alpha" f
+ruleAlpha =
+  describe "α-conversion: λx.t ↝ λy.t[x ↦ y], where y is fresh." $
+    makeRule "eval.alpha" f
   where
     f ctx = do
       t@(Abs x u) <- currentInContext ctx
@@ -57,7 +63,9 @@ ruleAlpha = makeRule "eval.alpha" f
 
 -- | η-reduction: λx. t x ↝ t, if x ∉ FV(t).
 ruleEta :: Rule Expr
-ruleEta = makeRule "eval.eta" f
+ruleEta =
+  describe "η-reduction: λx. t x ↝ t, if x ∉ FV(t)." $
+    makeRule "eval.eta" f
   where
     f (Abs x (App t (Var y)))
       | x == y && x `Set.notMember` freeVars t = Just t

@@ -13,6 +13,7 @@ module LambdaReasoner.Expr
     (-->),
     needRenamePaths,
     alphaEq,
+    rhoEq,
     etaRed,
     alphaEtaEq,
     alphaBetaEtaEq,
@@ -205,6 +206,13 @@ subst = go id
 nonCaptureAvoidingSubst :: String -> Expr -> Expr -> (Expr, Bool)
 nonCaptureAvoidingSubst x u t = Set.null <$> subst x u t
 
+-- | Compute the set of abstractions that need renaming in order to perform β-reduction on β-redices in a given term with α-conversion.
+-- >>> needRenamePaths $ read "(\\x. \\y. x) x"
+-- fromList []
+-- >>> needRenamePaths $ read "(\\x. \\y. x) y"
+-- fromList [PAppL (PAbs PHere)]
+-- >>> needRenamePaths $ read "(\\x. \\y. \\z. x) (y z)"
+-- fromList [PAppL (PAbs PHere),PAppL (PAbs (PAbs PHere))]
 needRenamePaths :: Expr -> Set ExprPath
 needRenamePaths = go id
   where
@@ -249,6 +257,17 @@ alphaEq = go [] []
     go e1 e2 (Abs x t) (Abs y t') =
       go (x : e1) (y : e2) t t'
     go _ _ _ _ = False
+
+--------------------------------------------------------------------------------
+
+infix 4 `rhoEq`
+
+-- | An equivalence relation that is stricter than α-equivalence.
+-- | I don't know how to call this relation, so I named it "ρ-equivalence" (ρ for "rename").
+-- | Two terms are ρ-equivalent if they are α-equivalent and the set of abstractions that need renaming for capture avoidance is the same.
+-- | This is useful for checking if α-conversion is "helpful" for β-reduction.
+rhoEq :: Expr -> Expr -> Bool
+rhoEq x y = x `alphaEq` y && needRenamePaths x == needRenamePaths y
 
 --------------------------------------------------------------------------------
 -- Eta reduction

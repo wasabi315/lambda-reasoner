@@ -25,7 +25,10 @@ buggySubst1 x u (Abs y t) = Abs y (buggySubst1 x u t)
 -- | A buggy version of the β-reduction rule that does not check for shadowing.
 -- e.g) (λx. λx. x) y ↝ λx. y
 buggyBeta1 :: Rule Expr
-buggyBeta1 = siblingOf ruleBeta $ buggyRule "eval.buggyBeta1" f
+buggyBeta1 =
+  describe "Shadowing should be taken into account in β-reduction." $
+    siblingOf ruleBeta $
+      buggyRule "eval.buggyBeta1" f
   where
     f (App (Abs x t) u)
       | x `isShadowedInside` t = Just $ buggySubst1 x u t
@@ -38,7 +41,10 @@ buggyBeta1 = siblingOf ruleBeta $ buggyRule "eval.buggyBeta1" f
 -- | A buggy version of the β-reduction rule that does not check variable capture.
 -- e.g) (λx. λy. x) y ↝ λy. y
 buggyBeta2 :: Rule Expr
-buggyBeta2 = siblingOf ruleBeta $ buggyRule "eval.buggyBeta2" f
+buggyBeta2 =
+  describe "Variable capture should be avoided in β-reduction." $
+    siblingOf ruleBeta $
+      buggyRule "eval.buggyBeta2" f
   where
     f (App (Abs x t) u)
       | (t', False) <- nonCaptureAvoidingSubst x u t = Just t'
@@ -47,7 +53,10 @@ buggyBeta2 = siblingOf ruleBeta $ buggyRule "eval.buggyBeta2" f
 -- | A buggy version of the α-conversion rule that captures a free variable.
 -- e.g.) λx. y ↝ λy. y
 buggyAlpha :: Rule Expr
-buggyAlpha = siblingOf ruleAlpha $ buggyRule "eval.buggyAlpha" f
+buggyAlpha =
+  describe "A free variable should not be captured in α-conversion." $
+    siblingOf ruleAlpha $
+      buggyRule "eval.buggyAlpha" f
   where
     f t@(Abs x u) =
       [Abs y $ rename x y u | y <- Set.toList (freeVars t)]
@@ -56,7 +65,10 @@ buggyAlpha = siblingOf ruleAlpha $ buggyRule "eval.buggyAlpha" f
 -- | A buggy version of the η-reduction rule that does not check for free variables.
 -- e.g.) λx. f x x ↝ f x
 buggyEta :: Rule Expr
-buggyEta = siblingOf ruleEta $ buggyRule "eval.buggyEta" f
+buggyEta =
+  describe "η-reduction λx. M x ↝ M can only be applied if x is not free in M." $
+    siblingOf ruleEta $
+      buggyRule "eval.buggyEta" f
   where
     f (Abs x (App t (Var y)))
       | x == y && x `Set.member` freeVars t = Just t
