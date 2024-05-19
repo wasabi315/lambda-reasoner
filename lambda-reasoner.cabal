@@ -27,7 +27,6 @@ library
   exposed-modules:
       LambdaReasoner.BuggyRules
       LambdaReasoner.Expr
-      LambdaReasoner.Generator
       LambdaReasoner.Rules
       LambdaReasoner.Strategies
       LambdaReasoner.Views

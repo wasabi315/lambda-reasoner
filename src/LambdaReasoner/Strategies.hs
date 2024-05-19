@@ -1,13 +1,15 @@
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BlockArguments #-}
 
 module LambdaReasoner.Strategies
-  ( fullBetaStrategy,
+  ( captureAvoidingBeta,
+    fullBetaStrategy,
     leftmostBetaStrategy,
   )
 where
 
 import Data.Function
 import Data.Maybe
+import qualified Data.Set as Set
 import Ideas.Common.Library as Ideas
 import LambdaReasoner.Expr
 import LambdaReasoner.Rules
@@ -18,23 +20,20 @@ import LambdaReasoner.Rules
 captureAvoidingBeta :: LabeledStrategy (Context Expr)
 captureAvoidingBeta =
   label "capture-avoiding-beta" $
-    -- If the current term is a beta redex, say (\x. t) u, save it
-    ruleSaveBetaRedex
-      -- Go down to t
-      .*. (ruleDown .*. ruleDownLast)
-      -- Apply α-conversion to appropriate subterms referring to the saved beta redex
-      .*. repeatS (Ideas.traverse [topdown, traversalFilter notShadowed] ruleAlpha)
-      -- Why this doesn't work?
-      -- .*. Ideas.traverse [full, topdown, traversalFilter notShadowed] (try ruleAlpha)
-      -- Go back to the beta redex
-      .*. (ruleUp .*. ruleUp)
+    repeatS
+      ( ruleSaveSub
+          .*. (ruleDown .*. ruleDownLast)
+          .*. check containSubVar
+          .*. Ideas.traverse [traversalFilter containSubVar] ruleAlpha
+          .*. (ruleUp .*. ruleUp)
+      )
       .*. liftToContext ruleBeta
-      .*. ruleForgetBetaRedex
   where
-    notShadowed ctx@(currentInContext -> Just (Abs y _)) =
-      let BetaRedex x _ _ = fromJust $ betaRedexRef ? ctx
-       in x /= y
-    notShadowed _ = True
+    containSubVar ctx
+      | Just t <- currentInContext ctx,
+        Sub x _ <- fromJust $ subRef ? ctx =
+          x `Set.member` freeVars t
+      | otherwise = True
 
 fullBetaStrategy :: LabeledStrategy (Context Expr)
 fullBetaStrategy =

@@ -26,12 +26,12 @@ buggyBeta1 :: Rule Expr
 buggyBeta1 = siblingOf ruleBeta $ buggyRule "eval.buggyBeta1" f
   where
     f (App (Abs x t) u)
-      | x `isBoundInside` t = Just $ buggySubst1 x u t
+      | x `isShadowedInside` t = Just $ buggySubst1 x u t
     f _ = Nothing
 
-    isBoundInside _ (Var _) = False
-    isBoundInside x (App t u) = isBoundInside x t || isBoundInside x u
-    isBoundInside x (Abs y t) = x == y || isBoundInside x t
+    isShadowedInside _ (Var _) = False
+    isShadowedInside x (App t u) = isShadowedInside x t || isShadowedInside x u
+    isShadowedInside x (Abs y t) = x == y || isShadowedInside x t
 
 buggyBeta2 :: Rule Expr
 buggyBeta2 = siblingOf ruleBeta $ buggyRule "eval.buggyBeta2" f
@@ -44,7 +44,7 @@ buggyAlpha :: Rule Expr
 buggyAlpha = siblingOf ruleAlpha $ buggyRule "eval.buggyAlpha" f
   where
     f t@(Abs x u) =
-      [Abs y (rename (Map.singleton x y) u) | y <- Set.toList (freeVars t)]
+      [Abs y $ rename (Map.singleton x y) u | y <- Set.toList (freeVars t)]
     f _ = []
 
 buggyEta :: Rule Expr

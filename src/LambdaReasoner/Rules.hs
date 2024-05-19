@@ -1,11 +1,10 @@
+{-# LANGUAGE BlockArguments #-}
+
 module LambdaReasoner.Rules
   ( ruleBeta,
-    betaRedexRef,
-    ruleSaveBetaRedex,
-    ruleForgetBetaRedex,
-    betaChainRef,
-    ruleSaveBetaChain,
-    ruleForgetBetaChain,
+    subRef,
+    ruleSaveSub,
+    ruleForgetSub,
     ruleAlpha,
     ruleEta,
   )
@@ -16,56 +15,38 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Ideas.Common.Library
 import LambdaReasoner.Expr
-import LambdaReasoner.Views
 
 --------------------------------------------------------------------------------
 
 ruleBeta :: Rule Expr
 ruleBeta = makeRule "eval.beta" f
   where
-    f (App (Abs x t) u) = subst (Map.singleton x u) t
+    f (App (Abs x t) u) = (x --> u) t
     f _ = Nothing
 
-betaRedexRef :: Ref BetaRedex
-betaRedexRef = makeRef "beta-redex"
+subRef :: Ref Sub
+subRef = makeRef "sub"
 
-ruleSaveBetaRedex :: Rule (Context Expr)
-ruleSaveBetaRedex = minorRule "eval.save-beta-redex" f
+ruleSaveSub :: Rule (Context Expr)
+ruleSaveSub = minorRule "eval.save-sub" f
   where
     f ctx = do
-      App (Abs x t) u <- currentInContext ctx
-      pure $ insertRef betaRedexRef (BetaRedex x t u) ctx
+      App (Abs x _) u <- currentInContext ctx
+      pure $ insertRef subRef (Sub x u) ctx
 
-ruleForgetBetaRedex :: Rule (Context Expr)
-ruleForgetBetaRedex = minorRule "eval.forget-beta-redex" f
-  where
-    f ctx = Just $ deleteRef betaRedexRef ctx
-
-betaChainRef :: Ref BetaChain
-betaChainRef = makeRef "beta-chain"
-
-ruleSaveBetaChain :: Rule (Context Expr)
-ruleSaveBetaChain = minorRule "eval.save-beta-chain" f
-  where
-    f ctx = do
-      bc <- match betaChainView =<< currentInContext ctx
-      pure $ insertRef betaChainRef bc ctx
-
-ruleForgetBetaChain :: Rule (Context Expr)
-ruleForgetBetaChain = minorRule "eval.forget-beta-chain" f
-  where
-    f ctx = Just $ deleteRef betaChainRef ctx
+ruleForgetSub :: Rule (Context Expr)
+ruleForgetSub = minorRule "eval.forget-sub" (Just . deleteRef subRef)
 
 ruleAlpha :: Rule (Context Expr)
-ruleAlpha =
-  addRecognizerBool (withoutContext alphaEq) $ makeRule "eval.alpha" f
+ruleAlpha = makeRule "eval.alpha" f
   where
     f ctx = do
       t@(Abs x u) <- currentInContext ctx
-      let fvs = maybe Set.empty (\(BetaRedex _ _ v) -> freeVars v) $ betaRedexRef ? ctx
-          y = fresh (fvs <> freeVars t) x
-      guard $ x /= y
-      pure $ replaceInContext (Abs y $ rename (Map.singleton x y) u) ctx
+      let fvs1 = foldMap (\(Sub _ v) -> freeVars v) $ subRef ? ctx
+          fvs2 = freeVars t
+          x' = fresh (fvs1 <> fvs2) x
+      guard $ x /= x' -- skip if no renaming is needed
+      pure $ replaceInContext (Abs x' $ rename (Map.singleton x x') u) ctx
 
 ruleEta :: Rule Expr
 ruleEta = makeRule "eval.eta" f

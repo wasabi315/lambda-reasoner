@@ -3,6 +3,7 @@
 
 module LambdaReasoner.Expr
   ( Expr (..),
+    Sub (..),
     BetaRedex (..),
     betaRedexView,
     freeVars,
@@ -10,8 +11,12 @@ module LambdaReasoner.Expr
     Rename,
     rename,
     Subst,
+    subst',
     subst,
     nonCaptureAvoidingSubst,
+    (-->),
+    isSubstSafe,
+    Ctx (..),
     alphaEq,
     etaRed,
     alphaEtaEq,
@@ -32,7 +37,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Ideas.Common.Library as Ideas hiding (from, to)
+import Ideas.Common.Library as Ideas
 import Text.ParserCombinators.ReadP (ReadP)
 import qualified Text.ParserCombinators.ReadP as ReadP
 import Text.Read
@@ -58,7 +63,7 @@ sym = lexeme . ReadP.string
 varP :: ReadP String
 varP =
   lexeme $
-    (:) <$> ReadP.satisfy isAlpha <*> ReadP.many (ReadP.satisfy isAlphaNum)
+    (:) <$> ReadP.satisfy isAlpha <*> ReadP.munch (isAlphaNum <||> (== '\''))
 
 atomP :: ReadP Expr
 atomP =
@@ -109,6 +114,29 @@ instance IsTerm Expr where
       ]
 
 instance Reference Expr
+
+--------------------------------------------------------------------------------
+
+data Sub = Sub String Expr
+
+instance Show Sub where
+  showsPrec p (Sub x t) =
+    showParen (p > 10) $
+      showString x . showString " -> " . showsPrec 11 t
+
+instance Read Sub where
+  readPrec = lift do
+    ReadP.skipSpaces
+    Sub <$> varP <*> (sym "->" *> exprP)
+
+subSymbol :: Symbol
+subSymbol = newSymbol "sub"
+
+instance IsTerm Sub where
+  toTerm (Sub x t) = TCon subSymbol [toTerm x, toTerm t]
+  termDecoder = tCon2 subSymbol Sub termDecoder termDecoder
+
+instance Reference Sub
 
 --------------------------------------------------------------------------------
 -- Beta redex
@@ -194,9 +222,6 @@ subst' = go []
           varCaps2 = if x `Set.member` fvs then Set.singleton ctx else mempty
        in (Abs x u', varCaps1 <> varCaps2)
 
-singleSubst' :: String -> Expr -> Expr -> (Expr, Set [Ctx])
-singleSubst' x t = subst' (Map.singleton x t)
-
 -- | @'subst' sub t@ substitutes variables in @t@ according to @sub@.
 -- Returns 'Nothing' if variable capture occurs.
 subst :: Subst -> Expr -> Maybe Expr
@@ -217,13 +242,17 @@ subst sub t = case subst' sub t of
 nonCaptureAvoidingSubst :: Subst -> Expr -> (Expr, Bool)
 nonCaptureAvoidingSubst sub t = Set.null <$> subst' sub t
 
+-- | @'isSubstSafe' x u t@ checks if the substitution @(x --> u)@ is safe in @t@.
+isSubstSafe :: String -> Expr -> Expr -> Bool
+isSubstSafe x u t = isJust $ (x --> u) t
+
 needRenameCtxs :: Expr -> Set [Ctx]
 needRenameCtxs = go []
   where
     go ctx (App t u)
       | Abs x t' <- t =
           let varCaps' =
-                singleSubst' x u t'
+                subst' (Map.singleton x u) t'
                   & snd
                   & Set.map (\varCap -> varCap ++ [CtxAbs, CtxAppL] ++ ctx)
            in varCaps' <> varCaps
@@ -232,6 +261,16 @@ needRenameCtxs = go []
         varCaps = go (CtxAppL : ctx) t <> go (CtxAppR : ctx) u
     go ctx (Abs _ t) = go (CtxAbs : ctx) t
     go _ (Var _) = mempty
+
+--------------------------------------------------------------------------------
+
+-- | Generate a fresh variable name that is not in the given set.
+-- If @x@ is not in the set, it is returned as is.
+fresh :: Set String -> String -> String
+fresh xs x =
+  x : [x ++ show n | n <- [0 :: Int ..]]
+    & find (`Set.notMember` xs)
+    & fromJust
 
 --------------------------------------------------------------------------------
 
@@ -287,12 +326,6 @@ eval gas env (App t u) = do
     VAbs _ f -> f (gas - 1) (eval gas env u)
     _ -> VApp t' <$> eval gas env u
 eval _ env (Abs x t) = pure $ VAbs x \gas u -> eval gas ((x, u) : env) t
-
-fresh :: Set String -> String -> String
-fresh xs x =
-  x : [x ++ show n | n <- [0 :: Int ..]]
-    & find (`Set.notMember` xs)
-    & fromJust
 
 quote :: Int -> Set String -> Val -> Maybe Expr
 quote _ _ (VVar x) = pure $ Var x
