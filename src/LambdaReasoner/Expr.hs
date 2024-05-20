@@ -15,7 +15,6 @@ module LambdaReasoner.Expr
     alphaEq,
     rhoEq,
     etaRed,
-    alphaEtaEq,
     alphaBetaEtaEq,
     normalize,
     fresh,
@@ -263,29 +262,12 @@ alphaEq = go [] []
 infix 4 `rhoEq`
 
 -- | An equivalence relation that is stricter than α-equivalence.
--- | I don't know how to call this relation, so I named it "ρ-equivalence" (ρ for "rename").
--- | Two terms are ρ-equivalent if they are α-equivalent and the set of abstractions that need renaming for capture avoidance is the same.
--- | This is useful for checking if α-conversion is "helpful" for β-reduction.
+-- I don't know how to call this relation, so I named it ρ-equivalence.
+-- Two terms are ρ-equivalent if they are α-equivalent and the set of abstractions that need renaming for capture avoidance is the same.
+-- This is useful for checking if α-conversion is meaningful.
+-- ρ because this equivalence relation captures the meaningfullness of Renaming.
 rhoEq :: Expr -> Expr -> Bool
 rhoEq x y = x `alphaEq` y && needRenamePaths x == needRenamePaths y
-
---------------------------------------------------------------------------------
--- Eta reduction
-
--- | η-reduce a term.
-etaRed :: Expr -> Expr
-etaRed (Var x) = Var x
-etaRed (App t u) = App (etaRed t) (etaRed u)
-etaRed (Abs x t) = case etaRed t of
-  App u (Var x')
-    | x == x' && x `Set.notMember` freeVars u -> u
-  t' -> Abs x t'
-
-infix 4 `alphaEtaEq`
-
--- | Check if two terms are αη-equivalent.
-alphaEtaEq :: Expr -> Expr -> Bool
-alphaEtaEq = alphaEq `on` etaRed
 
 --------------------------------------------------------------------------------
 -- Normalization with gas limit
@@ -313,12 +295,21 @@ quote gas ns (VAbs (fresh ns -> x) t) = do
   t2 <- quote gas (Set.insert x ns) t1
   return $ Abs x t2
 
+-- | η-reduce a term.
+etaRed :: Expr -> Expr
+etaRed (Var x) = Var x
+etaRed (App t u) = App (etaRed t) (etaRed u)
+etaRed (Abs x t) = case etaRed t of
+  App u (Var x')
+    | x == x' && x `Set.notMember` freeVars u -> u
+  t' -> Abs x t'
+
 -- | Normalize a term, up to a given gas limit.
 normalize :: Int -> Expr -> Maybe Expr
-normalize gas t = eval gas [] t >>= quote gas (freeVars t)
+normalize gas t = eval gas [] t >>= fmap etaRed . quote gas (freeVars t)
 
 -- | Check if two terms are αβη-equivalent, up to a given gas limit.
 alphaBetaEtaEq :: Int -> Expr -> Expr -> Bool
 alphaBetaEtaEq gas t u = case (normalize gas t, normalize gas u) of
-  (Just t', Just u') -> t' `alphaEtaEq` u'
+  (Just t', Just u') -> t' `alphaEq` u'
   _ -> False
