@@ -18,7 +18,7 @@ _GAS = 1024
 fullBetaEx, normalEx :: Exercise Expr
 fullBetaEx =
   emptyExercise
-    { exerciseId = describe "Evaluate a lambda term" $ newId "eval.fullBeta",
+    { exerciseId = describe "Evaluate a lambda term in the full beta reduction strategy" $ newId "eval.fullBeta",
       status = Experimental,
       strategy = fullBetaStrategy,
       extraRules = map liftToContext buggyRules,
@@ -29,11 +29,27 @@ fullBetaEx =
       ready = predicate isBetaNormal,
       prettyPrinter = show,
       parser = readEither,
-      examples = examplesFor Easy [_S `App` _K `App` _K, _S `App` _K `App` _S, Abs "x" (Abs "y" (Var "x")) `App` Var "y", Abs "x" (Abs "x" $ Var "x") `App` Var "y"]
+      examples =
+        mconcat
+          [ examplesFor
+              Easy
+              [ _I `App` _I,
+                _K `App` Var "x" `App` Var "y",
+                read "(\\x. \\y. x) y",
+                read "(\\x. \\x. x) y"
+              ],
+            examplesFor
+              Medium
+              [ _S `App` _K `App` _K,
+                _S `App` _K `App` _S,
+                _K `App` _I `App` omega,
+                read "(\\x. (\\y. \\z. x) (\\y. \\z. x)) (y z w)"
+              ]
+          ]
     }
 normalEx =
   fullBetaEx
-    { exerciseId = describe "Evaluate a lambda term in normal evaluation order" $ newId "eval.normalBeta",
+    { exerciseId = describe "Evaluate a lambda term in the normal evaluation order" $ newId "eval.normalBeta",
       strategy = normalBetaStrategy
     }
 
@@ -47,7 +63,7 @@ _S :: Expr
 _S = read "\\f . \\g . \\x . f x (g x)"
 
 omega :: Expr
-omega = read "(\\y . y y) (\\x . x x)"
+omega = read "(\\x . x x) (\\x . x x)"
 
 ------------------------------------------------------------------------------
 
